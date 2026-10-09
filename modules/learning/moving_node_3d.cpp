@@ -9,7 +9,7 @@ void MovingNode3D::_notification(int p_what) {
 		print_line("MovingNode3D process");
 
 		Vector3 new_position = get_position();
-		new_position.z += get_process_delta_time();
+		new_position.y += get_process_delta_time();
 		set_position(new_position);
 	}
 }

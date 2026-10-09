@@ -6,7 +6,7 @@
 class MovingNode3D : public Node3D {
 	GDCLASS(MovingNode3D, Node3D);
 
-protected: // what is bind methods
+protected:
 	static void _bind_methods();
 	void _notification(int p_what);
 
