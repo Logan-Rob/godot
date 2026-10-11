@@ -1,2 +1,6 @@
 #include "file_manager.h"
-#include "modules/voxel_engine/voxel_engine.h"
+
+void FileManager::save_block_data(Vector3i block_position, const SparseVoxelData &voxel_data) {
+
+}
+
