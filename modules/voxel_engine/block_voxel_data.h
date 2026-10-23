@@ -51,6 +51,7 @@ public:
 	PackedByteArray get_voxel_materials();
 	PackedInt32Array get_voxel_indices();
 	PackedByteArray get_edited_voxels();
+	int get_edited_voxel_count();
 	bool set_bulk_voxels_sparse(const PackedByteArray &densities, const PackedByteArray &materials, const PackedInt32Array &indices);
 	bool set_bulk_voxels_dense(const PackedByteArray &densities, const PackedByteArray &materials, const PackedByteArray &edited_voxels);
 	bool merge_sparse_block_data_into_self(const Ref<BlockVoxelData> &sparse_block_voxel_data);

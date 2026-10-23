@@ -242,6 +242,10 @@ PackedByteArray BlockVoxelData::get_edited_voxels() {
 	return voxel_is_edited;
 }
 
+int BlockVoxelData::get_edited_voxel_count() {
+	return edited_voxel_count;
+}
+
 bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, const PackedByteArray &materials, const PackedInt32Array &indices) {
 	if (current_resource_state != BlockVoxelData::ResourceState::Sparse) {
 		return false;
@@ -458,6 +462,7 @@ void BlockVoxelData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_voxel_materials"), &BlockVoxelData::get_voxel_materials);
 	ClassDB::bind_method(D_METHOD("get_voxel_indices"), &BlockVoxelData::get_voxel_indices);
 	ClassDB::bind_method(D_METHOD("get_edited_voxels"), &BlockVoxelData::get_edited_voxels);
+	ClassDB::bind_method(D_METHOD("get_edited_voxel_count"), &BlockVoxelData::get_edited_voxel_count);
 	ClassDB::bind_method(D_METHOD("set_bulk_voxels_sparse", "densities", "materials", "indices"), &BlockVoxelData::set_bulk_voxels_sparse);
 	ClassDB::bind_method(D_METHOD("set_bulk_voxels_dense", "densities", "materials", "edited_voxels"), &BlockVoxelData::set_bulk_voxels_dense);
 	ClassDB::bind_method(D_METHOD("merge_sparse_block_data_into_self", "sparse_block_voxel_data"), &BlockVoxelData::merge_sparse_block_data_into_self);
