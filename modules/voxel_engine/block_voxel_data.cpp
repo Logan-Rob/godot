@@ -288,7 +288,7 @@ bool BlockVoxelData::set_bulk_voxels_dense(const PackedByteArray &densities, con
 		return false;
 	}
 	
-	if (densities.size() != VoxelConstants::BLOCK_VOXEL_VOLUME || materials.size() != VoxelConstants::BLOCK_VOXEL_VOLUME) {
+	if (densities.size() != VoxelConstants::BLOCK_VOXEL_VOLUME || materials.size() != VoxelConstants::BLOCK_VOXEL_VOLUME || voxel_is_edited.size() != VoxelConstants::BLOCK_VOXEL_VOLUME) {
 		return false;
 	}
 	
