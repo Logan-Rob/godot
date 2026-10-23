@@ -36,6 +36,7 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 			voxel_densities.clear();
 			voxel_materials.clear();
 			voxel_indices.clear();
+			voxel_is_edited.clear();
 			
 			break;
 		case BlockVoxelData::ResourceState::Empty:
@@ -45,6 +46,7 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 			voxel_densities.clear();
 			voxel_materials.clear();
 			voxel_indices.clear();
+			voxel_is_edited.clear();
 			
 			break;
 		case BlockVoxelData::ResourceState::Sparse:
@@ -54,6 +56,7 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 			voxel_densities.clear();
 			voxel_materials.clear();
 			voxel_indices.clear();
+			voxel_is_edited.clear();
 			
 			break;
 		case BlockVoxelData::ResourceState::Dense:
@@ -63,11 +66,14 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 			voxel_densities.clear();
 			voxel_materials.clear();
 			voxel_indices.clear();
+			voxel_is_edited.clear();
 			
 			voxel_densities.resize(VoxelConstants::BLOCK_VOXEL_VOLUME);
 			voxel_materials.resize(VoxelConstants::BLOCK_VOXEL_VOLUME);
+			voxel_is_edited.resize(VoxelConstants::BLOCK_VOXEL_VOLUME);
 			voxel_densities.fill(0);
 			voxel_materials.fill(0);
+			voxel_is_edited.fill(0);
 			
 			break;
 	}
@@ -75,7 +81,7 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 
 
 
-bool BlockVoxelData::set_voxel(int voxel_index, int voxel_density, int voxel_material) {
+bool BlockVoxelData::set_voxel(int voxel_index, int voxel_density, int voxel_material, bool is_voxel_edited) {
 	if (voxel_index < 0 || voxel_index >= VoxelConstants::BLOCK_VOXEL_VOLUME) {
 		return false;
 	}
@@ -110,6 +116,12 @@ bool BlockVoxelData::set_voxel(int voxel_index, int voxel_density, int voxel_mat
 	} else {
 		voxel_densities.set(voxel_index, voxel_density);
 		voxel_materials.set(voxel_index, voxel_material);
+		
+		if (is_voxel_edited) {
+			voxel_is_edited.set(voxel_index, 1);
+		} else {
+			voxel_is_edited.set(voxel_index, 0);
+		}
 		
 		return true;
 	}
@@ -220,6 +232,10 @@ PackedInt32Array BlockVoxelData::get_voxel_indices() {
 	return voxel_indices;
 }
 
+PackedByteArray BlockVoxelData::get_edited_voxels() {
+	return voxel_is_edited;
+}
+
 bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, const PackedByteArray &materials, const PackedInt32Array &indices) {
 	if (current_resource_state != BlockVoxelData::ResourceState::Sparse) {
 		return false;
@@ -257,7 +273,7 @@ bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, co
 	return true;
 }
 
-bool BlockVoxelData::set_bulk_voxels_dense(const PackedByteArray &densities, const PackedByteArray &materials) {
+bool BlockVoxelData::set_bulk_voxels_dense(const PackedByteArray &densities, const PackedByteArray &materials, const PackedByteArray &edited_voxels) {
 	if (current_resource_state != BlockVoxelData::ResourceState::Dense) {
 		return false;
 	}
@@ -268,6 +284,7 @@ bool BlockVoxelData::set_bulk_voxels_dense(const PackedByteArray &densities, con
 	
 	voxel_densities = densities;
 	voxel_materials = materials;
+	voxel_is_edited = edited_voxels;
 	
 	return true;
 }
@@ -296,7 +313,92 @@ bool BlockVoxelData::merge_sparse_block_data_into_self(const Ref<BlockVoxelData>
 		uint8_t density = source_densities[i];
 		uint8_t material = source_materials[i];
 		
-		set_voxel(voxel_index, density, material);
+		set_voxel(voxel_index, density, material, true);
+	}
+	
+	return true;
+}
+
+bool BlockVoxelData::generate_dense_block_data(bool use_terrain_generator) {
+	initialize_voxel_data(BlockVoxelData::ResourceState::Dense);
+	
+	if (!use_terrain_generator) {
+		return true;
+	}
+	
+	/*for (int voxel_index = 0; voxel_index < VoxelConstants::BLOCK_VOXEL_VOLUME; voxel_index++) {
+		// future code to generate voxel_index when i make the generator
+	}*/
+	
+	return true;
+}
+
+bool BlockVoxelData::convert_sparse_to_dense(bool use_terrain_generator) {
+	if (current_resource_state != BlockVoxelData::ResourceState::Sparse) {
+		return false;
+	}
+	
+	PackedByteArray saved_densities = voxel_densities;
+	PackedByteArray saved_materials = voxel_materials;
+	PackedInt32Array saved_indices = voxel_indices;
+	
+	initialize_voxel_data(BlockVoxelData::ResourceState::Dense);
+	
+	if (use_terrain_generator) {
+		HashMap<int, int> saved_index_lookup;
+		int sparse_voxel_count = saved_indices.size();
+		for (int i = 0; i < sparse_voxel_count; i++) {
+			saved_index_lookup[saved_indices[i]] = i;
+		}
+		
+		for (int voxel_index = 0; voxel_index < VoxelConstants::BLOCK_VOXEL_VOLUME; voxel_index++) {
+			if (saved_index_lookup.has(voxel_index)) {
+				continue;
+			}
+			
+			// future code to generate voxel_index when i make the generator
+		}
+	}
+	
+	int sparse_voxel_count = saved_indices.size();
+	
+	for (int i = 0; i < sparse_voxel_count; i++) {
+		int voxel_index = saved_indices[i];
+		uint8_t density = saved_densities[i];
+		uint8_t material = saved_materials[i];
+		
+		set_voxel(voxel_index, density, material, true);
+	}
+	
+	return true;
+}
+
+bool BlockVoxelData::convert_dense_to_sparse() {
+	if (current_resource_state != BlockVoxelData::ResourceState::Dense) {
+		return false;
+	}
+	
+	PackedByteArray saved_densities = voxel_densities;
+	PackedByteArray saved_materials = voxel_materials;
+	PackedByteArray saved_edited_voxels = voxel_is_edited;
+	
+	initialize_voxel_data(BlockVoxelData::ResourceState::Sparse);
+	
+	for (int i = 0; i < VoxelConstants::BLOCK_VOXEL_VOLUME; i++) {
+		int voxel_index = i;
+		
+		if (saved_edited_voxels[voxel_index] == 0) {
+			continue;
+		}
+		
+		if (voxel_index < 0 || voxel_index >= VoxelConstants::BLOCK_VOXEL_VOLUME) {
+			continue;
+		}
+		
+		uint8_t density = saved_densities[voxel_index];
+		uint8_t material = saved_materials[voxel_index];
+		
+		set_voxel(voxel_index, density, material, true);
 	}
 	
 	return true;
@@ -307,16 +409,20 @@ bool BlockVoxelData::merge_sparse_block_data_into_self(const Ref<BlockVoxelData>
 void BlockVoxelData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_resource_state"), &BlockVoxelData::get_resource_state);
 	ClassDB::bind_method(D_METHOD("initialize_voxel_data", "resource_state"), &BlockVoxelData::initialize_voxel_data);
-	ClassDB::bind_method(D_METHOD("set_voxel", "voxel_index", "voxel_density", "voxel_material"), &BlockVoxelData::set_voxel);
+	ClassDB::bind_method(D_METHOD("set_voxel", "voxel_index", "voxel_density", "voxel_material", "is_voxel_edited"), &BlockVoxelData::set_voxel, DEFVAL(true));
 	ClassDB::bind_method(D_METHOD("remove_voxel", "voxel_index"), &BlockVoxelData::remove_voxel);
 	ClassDB::bind_method(D_METHOD("get_voxel", "voxel_index"), &BlockVoxelData::get_voxel);
 	ClassDB::bind_method(D_METHOD("get_voxel_count"), &BlockVoxelData::get_voxel_count);
 	ClassDB::bind_method(D_METHOD("get_voxel_densities"), &BlockVoxelData::get_voxel_densities);
 	ClassDB::bind_method(D_METHOD("get_voxel_materials"), &BlockVoxelData::get_voxel_materials);
 	ClassDB::bind_method(D_METHOD("get_voxel_indices"), &BlockVoxelData::get_voxel_indices);
+	ClassDB::bind_method(D_METHOD("get_edited_voxels"), &BlockVoxelData::get_edited_voxels);
 	ClassDB::bind_method(D_METHOD("set_bulk_voxels_sparse", "densities", "materials", "indices"), &BlockVoxelData::set_bulk_voxels_sparse);
-	ClassDB::bind_method(D_METHOD("set_bulk_voxels_dense", "densities", "materials"), &BlockVoxelData::set_bulk_voxels_dense);
+	ClassDB::bind_method(D_METHOD("set_bulk_voxels_dense", "densities", "materials", "edited_voxels"), &BlockVoxelData::set_bulk_voxels_dense);
 	ClassDB::bind_method(D_METHOD("merge_sparse_block_data_into_self", "sparse_block_voxel_data"), &BlockVoxelData::merge_sparse_block_data_into_self);
+	ClassDB::bind_method(D_METHOD("generate_dense_block_data", "use_terrain_generator"), &BlockVoxelData::generate_dense_block_data);
+	ClassDB::bind_method(D_METHOD("convert_sparse_to_dense", "use_terrain_generator"), &BlockVoxelData::convert_sparse_to_dense);
+	ClassDB::bind_method(D_METHOD("convert_dense_to_sparse"), &BlockVoxelData::convert_dense_to_sparse);
 	
 	BIND_ENUM_CONSTANT(Uninitialized);
 	BIND_ENUM_CONSTANT(Empty);
