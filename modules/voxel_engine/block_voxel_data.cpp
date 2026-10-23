@@ -37,6 +37,7 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 			voxel_materials.clear();
 			voxel_indices.clear();
 			voxel_is_edited.clear();
+			edited_voxel_count = 0;
 			
 			break;
 		case BlockVoxelData::ResourceState::Empty:
@@ -47,6 +48,7 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 			voxel_materials.clear();
 			voxel_indices.clear();
 			voxel_is_edited.clear();
+			edited_voxel_count = 0;
 			
 			break;
 		case BlockVoxelData::ResourceState::Sparse:
@@ -57,6 +59,7 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 			voxel_materials.clear();
 			voxel_indices.clear();
 			voxel_is_edited.clear();
+			edited_voxel_count = 0;
 			
 			break;
 		case BlockVoxelData::ResourceState::Dense:
@@ -67,6 +70,7 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 			voxel_materials.clear();
 			voxel_indices.clear();
 			voxel_is_edited.clear();
+			edited_voxel_count = 0;
 			
 			voxel_densities.resize(VoxelConstants::BLOCK_VOXEL_VOLUME);
 			voxel_materials.resize(VoxelConstants::BLOCK_VOXEL_VOLUME);
@@ -118,8 +122,10 @@ bool BlockVoxelData::set_voxel(int voxel_index, int voxel_density, int voxel_mat
 		voxel_materials.set(voxel_index, voxel_material);
 		
 		if (is_voxel_edited) {
+			request_edited_voxel_count_change(voxel_index, true);
 			voxel_is_edited.set(voxel_index, 1);
 		} else {
+			request_edited_voxel_count_change(voxel_index, false);
 			voxel_is_edited.set(voxel_index, 0);
 		}
 		
@@ -285,6 +291,11 @@ bool BlockVoxelData::set_bulk_voxels_dense(const PackedByteArray &densities, con
 	voxel_densities = densities;
 	voxel_materials = materials;
 	voxel_is_edited = edited_voxels;
+	edited_voxel_count = 0;
+	
+	for (int is_voxel_edited : voxel_is_edited) {
+		edited_voxel_count += is_voxel_edited;
+	}
 	
 	return true;
 }
@@ -405,6 +416,36 @@ bool BlockVoxelData::convert_dense_to_sparse() {
 }
 
 
+
+void BlockVoxelData::request_edited_voxel_count_change(int voxel_index, bool is_adding) {
+	if (current_resource_state != BlockVoxelData::ResourceState::Dense) {
+		return;
+	}
+	
+	if (is_adding) {
+		if (voxel_is_edited[voxel_index] == 1) {
+			return;
+		}
+		
+		if (edited_voxel_count >= VoxelConstants::BLOCK_VOXEL_VOLUME) {
+			edited_voxel_count = VoxelConstants::BLOCK_VOXEL_VOLUME;
+			return;
+		}
+		
+		edited_voxel_count += 1;
+	} else {
+		if (voxel_is_edited[voxel_index] == 0) {
+			return;
+		}
+		
+		if (edited_voxel_count <= 0) {
+			edited_voxel_count = 0;
+			return;
+		}
+		
+		edited_voxel_count -= 1;
+	}
+}
 
 void BlockVoxelData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_resource_state"), &BlockVoxelData::get_resource_state);
