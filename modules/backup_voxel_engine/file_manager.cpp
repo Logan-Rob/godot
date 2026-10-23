@@ -1,11 +1,19 @@
 #include "file_manager.h"
 #include "voxel_constants.h"
+#include "core/math/vector3i.h"
 #include "core/variant/variant.h"
+#include "core/object/class_db.h"
 
 
-
-bool FileManager::save_voxels(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, Vector3i block_position, BlockVoxelData &voxel_data) {
+bool FileManager::save_voxels(Vector3i block_position, Ref<BlockVoxelResource> voxel_resource) {
+	Ref<FileAccess> header_file = FileAccess::open("user://headers.bin", FileAccess::READ_WRITE);
+	Ref<FileAccess> payload_file = FileAccess::open("user://headers.bin", FileAccess::READ_WRITE);
+	
+	BlockVoxelResource::BlockVoxelData &voxel_data = voxel_resource->voxel_data;
+	
 	if (!voxel_data.is_initialized) {
+		header_file->close();
+		payload_file->close();
 		return false;
 	}
 	
@@ -20,36 +28,55 @@ bool FileManager::save_voxels(const Ref<FileAccess> &header_file, const Ref<File
 	}
 	
 	if (header_index < 0) {
+		header_file->close();
+		payload_file->close();
 		return false;
 	}
 	
-	BlockVoxelData base_voxel_data;
+	BlockVoxelResource::BlockVoxelData base_voxel_data;
 	
 	if (!read_voxels_from_disk(header_file, payload_file, header_index, base_voxel_data)) {
+		header_file->close();
+		payload_file->close();
 		return false;
 	}
 	
 	if (voxel_data.is_dense || is_new_header) {
 		if (!write_voxels_to_disk(header_file, payload_file, header_index, voxel_data)) {
+			header_file->close();
+			payload_file->close();
 			return false;
 		}
 	} else {
 		if (!merge_voxel_data(*voxel_data.sparse_voxel_data_ptr, base_voxel_data)) {
+			header_file->close();
+			payload_file->close();
 			return false;
 		}
 		
 		if (!write_voxels_to_disk(header_file, payload_file, header_index, base_voxel_data)) {
+			header_file->close();
+			payload_file->close();
 			return false;
 		}
 	}
 	
+	header_file->close();
+	payload_file->close();
 	return true;
 }
 
-bool FileManager::load_voxels(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, Vector3i block_position, BlockVoxelData &voxel_data) {
+bool FileManager::load_voxels(Vector3i block_position, Ref<BlockVoxelResource> voxel_resource) {
+	Ref<FileAccess> header_file = FileAccess::open("user://headers.bin", FileAccess::READ_WRITE);
+	Ref<FileAccess> payload_file = FileAccess::open("user://headers.bin", FileAccess::READ_WRITE);
+	
+	BlockVoxelResource::BlockVoxelData &voxel_data = voxel_resource->voxel_data;
+	
 	int *header_index_ptr = header_index_lookup.getptr(block_position);
 	
 	if (header_index_ptr == nullptr) {
+		header_file->close();
+		payload_file->close();
 		return false;
 	}
 	
@@ -57,15 +84,19 @@ bool FileManager::load_voxels(const Ref<FileAccess> &header_file, const Ref<File
 	const int header_index = *header_index_ptr;
 	
 	if (!read_voxels_from_disk(header_file, payload_file, header_index, voxel_data)) {
+		header_file->close();
+		payload_file->close();
 		return false;
 	}
 	
+	header_file->close();
+	payload_file->close();
 	return true;
 }
 
 
 
-bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, int header_index, BlockVoxelData &voxel_data) {
+bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, int header_index, BlockVoxelResource::BlockVoxelData &voxel_data) {
 	if (!voxel_data.is_initialized || !is_header_file_initialized || !is_payload_file_initialized || !header_file.is_valid() || !payload_file.is_valid() || !header_file->is_open() || !payload_file->is_open()) {
 		return false;
 	}
@@ -154,7 +185,7 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 	return true;
 }
 
-bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, int header_index, BlockVoxelData &voxel_data) {
+bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, int header_index, BlockVoxelResource::BlockVoxelData &voxel_data) {
 	if (voxel_data.is_initialized || !is_header_file_initialized || !is_payload_file_initialized || !header_file.is_valid() || !payload_file.is_valid() || !header_file->is_open() || !payload_file->is_open()) {
 		return false;
 	}
@@ -316,7 +347,129 @@ void FileManager::trim_free_tail_headers(const Ref<FileAccess> &header_file) {
 
 
 
-bool FileManager::merge_voxel_data(SparseVoxelData &input_voxel_data, BlockVoxelData &dst_base_voxel_data) {
+void FileManager::compact_files() {
+	Ref<FileAccess> header_file = FileAccess::open("user://headers.bin", FileAccess::READ_WRITE);
+	Ref<FileAccess> payload_file = FileAccess::open("user://headers.bin", FileAccess::READ_WRITE);
+	
+	compact_header_file(header_file);
+	compact_payload_file(header_file, payload_file);
+	
+	header_file->close();
+	payload_file->close();
+	
+	store_header_indices();
+}
+
+void FileManager::compact_header_file(const Ref<FileAccess> &header_file) {
+	int total_header_count = get_total_block_header_count(header_file);
+	int active_header_bytes = HEADER_FILE_HEADER_LENGTH;
+	
+	PackedByteArray header_byte_buffer;
+	header_byte_buffer.resize(BLOCK_HEADER_LENGTH);
+	
+	for (int i = 0; i < total_header_count; i++) {
+		int header_byte_index = convert_header_index_to_byte_index(i);
+		BlockHeaderBitset bool_bitset = get_header_bool_bitset(header_file, header_byte_index);
+		
+		if (!bool_bitset.is_active) {
+			continue;
+		}
+		
+		int desired_header_byte_index = active_header_bytes;
+		
+		if (header_byte_index != desired_header_byte_index) {
+			header_file->seek(header_byte_index);
+			header_byte_buffer = header_file->get_buffer(BLOCK_HEADER_LENGTH);
+			
+			header_file->seek(desired_header_byte_index);
+			header_file->store_buffer(header_byte_buffer);
+		}
+		
+		active_header_bytes += BLOCK_HEADER_LENGTH;
+	}
+	
+	header_file->resize(active_header_bytes);
+}
+
+void FileManager::compact_payload_file(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file) {
+	int total_header_count = get_total_block_header_count(header_file);
+	int active_payload_bytes = PAYLOAD_FILE_HEADER_LENGTH;
+	
+	PackedByteArray payload_byte_buffer;
+	HashMap<int, Vector2i> header_payload_pointer_lookup;
+	
+	for (int i = 0; i < total_header_count; i++) {
+		int header_byte_index = convert_header_index_to_byte_index(i);
+		BlockHeaderBitset bool_bitset = get_header_bool_bitset(header_file, header_byte_index);
+		
+		if (!bool_bitset.is_active) {
+			continue;
+		}
+		
+		header_payload_pointer_lookup[get_header_payload_pointer(header_file, header_byte_index)] = Vector2i(header_byte_index, get_header_payload_length(header_file, header_byte_index));
+	}
+	
+	Vector<int> sorted_payload_pointers;
+	
+	for (const KeyValue<int, Vector2i> &key_value_ptr : header_payload_pointer_lookup) {
+		sorted_payload_pointers.push_back(key_value_ptr.key);
+	}
+	
+	sorted_payload_pointers.sort();
+	
+	for (int payload_pointer : sorted_payload_pointers) {
+		Vector2i value_pair = header_payload_pointer_lookup.get(payload_pointer);
+		int header_byte_index = value_pair.x;
+		int payload_length = value_pair.y;
+		
+		if (payload_pointer <= PAYLOAD_FILE_HEADER_LENGTH ||payload_length <= 0) {
+			continue;
+		}
+		
+		int desired_payload_byte_index = active_payload_bytes;
+		
+		if (payload_pointer != desired_payload_byte_index) {
+			payload_file->seek(payload_pointer);
+			payload_byte_buffer = payload_file->get_buffer(payload_length);
+			
+			payload_file->seek(desired_payload_byte_index);
+			payload_file->store_buffer(payload_byte_buffer);
+			
+			store_header_payload_pointer(header_file, header_byte_index, desired_payload_byte_index);
+		}
+		
+		active_payload_bytes += payload_length;
+	}
+	
+	payload_file->resize(active_payload_bytes);
+}
+
+void FileManager::store_header_indices() {
+	Ref<FileAccess> header_file = FileAccess::open("user://headers.bin", FileAccess::READ_WRITE);
+	
+	header_index_lookup.clear();
+	free_header_indices.clear();
+	
+	int total_header_count = get_total_block_header_count(header_file);
+	
+	for (int i = 0; i < total_header_count; i++) {
+		int header_byte_index = convert_header_index_to_byte_index(i);
+		BlockHeaderBitset bool_bitset = get_header_bool_bitset(header_file, header_byte_index);
+		
+		if (bool_bitset.is_active) {
+			Vector3i block_position = get_header_position(header_file, header_byte_index);
+			header_index_lookup[block_position] = i;
+		} else {
+			free_header_indices.append(i);
+		}
+	}
+	
+	header_file->close();
+}
+
+
+
+bool FileManager::merge_voxel_data(BlockVoxelResource::SparseVoxelData &input_voxel_data, BlockVoxelResource::BlockVoxelData &dst_base_voxel_data) {
 	if (!dst_base_voxel_data.is_initialized) {
 		return false;
 	}
@@ -462,4 +615,16 @@ void FileManager::store_header_voxel_count(const Ref<FileAccess> &header_file, c
 	move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_VOXEL_COUNT_INDEX);
 	
 	header_file->store_16(voxel_count);
+}
+
+
+
+void FileManager::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("save_voxels", "block_position", "input_voxel_data"), &FileManager::save_voxels);
+	ClassDB::bind_method(D_METHOD("load_voxels", "block_position", "output_voxel_data"), &FileManager::load_voxels);
+	ClassDB::bind_method(D_METHOD("compact_files"), &FileManager::compact_files);
+	ClassDB::bind_method(D_METHOD("store_header_indices"), &FileManager::store_header_indices);
+	//ClassDB::bind_method(D_METHOD("get_block_header_file_directory"), &FileManager::get_block_header_file_directory);
+	//ClassDB::bind_method(D_METHOD("get_block_payload_file_directory"), &FileManager::get_block_payload_file_directory);
+	//ClassDB::bind_method(D_METHOD("initialize_file_storage", "header_file_directory", "payload_file_directory"), &FileManager::initialize_file_storage);
 }
