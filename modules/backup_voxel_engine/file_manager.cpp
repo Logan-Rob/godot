@@ -509,29 +509,38 @@ int FileManager::convert_header_index_to_byte_index(const int header_index) {
 	return header_byte_index;
 }
 
-void FileManager::move_cursor_to_header_property(const Ref<FileAccess> &header_file, const int header_byte_index, const int header_property) {
+
+Error FileManager::move_cursor_to_header_property(const Ref<FileAccess> &header_file, const int header_byte_index, const int header_property) {
 	const int property_byte_index = header_byte_index + header_property;
-	
 	header_file->seek(property_byte_index);
+	
+	return header_file->get_error();
 }
+
+
 
 Vector3i FileManager::get_header_position(const Ref<FileAccess> &header_file, const int header_byte_index) {
 	move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_POSITION_INDEX);
 	
 	Vector3i block_position;
 	block_position.x = static_cast<int32_t>(header_file->get_32());
-    block_position.y = static_cast<int32_t>(header_file->get_32());
-    block_position.z = static_cast<int32_t>(header_file->get_32());
+	block_position.y = static_cast<int32_t>(header_file->get_32());
+	block_position.z = static_cast<int32_t>(header_file->get_32());
 	
 	return block_position;
 }
 
-void FileManager::store_header_position(const Ref<FileAccess> &header_file, const int header_byte_index, const Vector3i block_position) {
-	move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_POSITION_INDEX);
+Error FileManager::store_header_position(const Ref<FileAccess> &header_file, const int header_byte_index, const Vector3i block_position) {
+	Error cursor_error = move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_POSITION_INDEX);
+	if (cursor_error != OK) {
+		return cursor_error;
+	}
 	
 	header_file->store_32(block_position.x);
 	header_file->store_32(block_position.y);
 	header_file->store_32(block_position.z);
+	
+	return header_file->get_error();
 }
 
 uint64_t FileManager::get_header_payload_pointer(const Ref<FileAccess> &header_file, const int header_byte_index) {
@@ -540,10 +549,15 @@ uint64_t FileManager::get_header_payload_pointer(const Ref<FileAccess> &header_f
 	return static_cast<uint64_t>(header_file->get_64());
 }
 
-void FileManager::store_header_payload_pointer(const Ref<FileAccess> &header_file, const int header_byte_index, const uint64_t payload_pointer) {
-	move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_PAYLOAD_POINTER_INDEX);
+Error FileManager::store_header_payload_pointer(const Ref<FileAccess> &header_file, const int header_byte_index, const uint64_t payload_pointer) {
+	Error cursor_error = move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_PAYLOAD_POINTER_INDEX);
+	if (cursor_error != OK) {
+		return cursor_error;
+	}
 	
 	header_file->store_64(payload_pointer);
+	
+	return header_file->get_error();
 }
 
 uint32_t FileManager::get_header_payload_length(const Ref<FileAccess> &header_file, const int header_byte_index) {
@@ -552,10 +566,15 @@ uint32_t FileManager::get_header_payload_length(const Ref<FileAccess> &header_fi
 	return static_cast<uint32_t>(header_file->get_32());
 }
 
-void FileManager::store_header_payload_length(const Ref<FileAccess> &header_file, const int header_byte_index, const uint32_t payload_length) {
-	move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_PAYLOAD_LENGTH_INDEX);
+Error FileManager::store_header_payload_length(const Ref<FileAccess> &header_file, const int header_byte_index, const uint32_t payload_length) {
+	Error cursor_error = move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_PAYLOAD_LENGTH_INDEX);
+	if (cursor_error != OK) {
+		return cursor_error;
+	}
 	
 	header_file->store_32(payload_length);
+	
+	return header_file->get_error();
 }
 
 FileManager::BlockHeaderBitset FileManager::get_header_bool_bitset(const Ref<FileAccess> &header_file, const int header_byte_index) {
@@ -566,7 +585,7 @@ FileManager::BlockHeaderBitset FileManager::get_header_bool_bitset(const Ref<Fil
 	BlockHeaderBitset bool_bitset;
 	bool_bitset.is_active = (bits & (1u << 0)) != 0;
 	bool_bitset.is_dense = (bits & (1u << 1)) != 0;
-	bool_bitset.is_write_in_progress = (bits & (1u << 2)) != 0;
+	bool_bitset.reserved_2 = (bits & (1u << 2)) != 0;
 	bool_bitset.reserved_3 = (bits & (1u << 3)) != 0;
 	bool_bitset.reserved_4 = (bits & (1u << 4)) != 0;
 	bool_bitset.reserved_5 = (bits & (1u << 5)) != 0;
@@ -576,14 +595,17 @@ FileManager::BlockHeaderBitset FileManager::get_header_bool_bitset(const Ref<Fil
     return bool_bitset;
 }
 
-void FileManager::store_header_bool_bitset(const Ref<FileAccess> &header_file, const int header_byte_index, const FileManager::BlockHeaderBitset &bool_bitset) {
-	move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_BOOLEAN_BITSET_INDEX);
-
+Error FileManager::store_header_bool_bitset(const Ref<FileAccess> &header_file, const int header_byte_index, const FileManager::BlockHeaderBitset &bool_bitset) {
+	Error cursor_error = move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_BOOLEAN_BITSET_INDEX);
+	if (cursor_error != OK) {
+		return cursor_error;
+	}
+	
 	uint8_t bits = 0;
 	
 	bits |= static_cast<uint8_t>(bool_bitset.is_active) << 0;
 	bits |= static_cast<uint8_t>(bool_bitset.is_dense) << 1;
-	bits |= static_cast<uint8_t>(bool_bitset.is_write_in_progress) << 2;
+	bits |= static_cast<uint8_t>(bool_bitset.reserved_2) << 2;
 	bits |= static_cast<uint8_t>(bool_bitset.reserved_3) << 3;
 	bits |= static_cast<uint8_t>(bool_bitset.reserved_4) << 4;
 	bits |= static_cast<uint8_t>(bool_bitset.reserved_5) << 5;
@@ -591,6 +613,8 @@ void FileManager::store_header_bool_bitset(const Ref<FileAccess> &header_file, c
 	bits |= static_cast<uint8_t>(bool_bitset.reserved_7) << 7;
 	
 	header_file->store_8(bits);
+	
+	return header_file->get_error();
 }
 
 uint8_t FileManager::get_header_padding_bytes(const Ref<FileAccess> &header_file, const int header_byte_index) {
@@ -599,10 +623,15 @@ uint8_t FileManager::get_header_padding_bytes(const Ref<FileAccess> &header_file
 	return static_cast<uint8_t>(header_file->get_8());
 }
 
-void FileManager::store_header_padding_bytes(const Ref<FileAccess> &header_file, const int header_byte_index, const uint8_t padding_bytes) {
-	move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_PADDING_BYTES_INDEX);
+Error FileManager::store_header_padding_bytes(const Ref<FileAccess> &header_file, const int header_byte_index, const uint8_t padding_bytes) {
+	Error cursor_error = move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_PADDING_BYTES_INDEX);
+	if (cursor_error != OK) {
+		return cursor_error;
+	}
 	
 	header_file->store_8(padding_bytes);
+	
+	return header_file->get_error();
 }
 
 uint16_t FileManager::get_header_voxel_count(const Ref<FileAccess> &header_file, const int header_byte_index) {
@@ -611,10 +640,15 @@ uint16_t FileManager::get_header_voxel_count(const Ref<FileAccess> &header_file,
 	return static_cast<uint16_t>(header_file->get_16());
 }
 
-void FileManager::store_header_voxel_count(const Ref<FileAccess> &header_file, const int header_byte_index, const uint16_t voxel_count) {
-	move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_VOXEL_COUNT_INDEX);
+Error FileManager::store_header_voxel_count(const Ref<FileAccess> &header_file, const int header_byte_index, const uint16_t voxel_count) {
+	Error cursor_error = move_cursor_to_header_property(header_file, header_byte_index, BLOCK_HEADER_VOXEL_COUNT_INDEX);
+	if (cursor_error != OK) {
+		return cursor_error;
+	}
 	
 	header_file->store_16(voxel_count);
+	
+	return header_file->get_error();
 }
 
 

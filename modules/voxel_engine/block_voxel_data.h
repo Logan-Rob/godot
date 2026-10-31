@@ -6,6 +6,11 @@
 #include <cstdint>
 
 
+
+class FileManager;
+
+
+
 class Voxel : public RefCounted {
 	GDCLASS(Voxel, RefCounted);
 
@@ -31,6 +36,7 @@ protected:
 
 class BlockVoxelData : public Resource {
 	GDCLASS(BlockVoxelData, Resource);
+	friend class FileManager;
 
 public:
 	enum ResourceState {

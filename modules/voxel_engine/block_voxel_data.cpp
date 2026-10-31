@@ -309,12 +309,22 @@ bool BlockVoxelData::merge_sparse_block_data_into_self(const Ref<BlockVoxelData>
 		return false;
 	}
 	
-	if (current_resource_state == BlockVoxelData::ResourceState::Uninitialized || current_resource_state ==  BlockVoxelData::ResourceState::Empty) {
+	if (current_resource_state == BlockVoxelData::ResourceState::Uninitialized) {
 		return false;
 	}
 	
 	if (sparse_block_voxel_data->get_resource_state() != BlockVoxelData::ResourceState::Sparse) {
 		return false;
+	}
+	
+	if (current_resource_state ==  BlockVoxelData::ResourceState::Empty) {
+		initialize_voxel_data(BlockVoxelData::ResourceState::Sparse);
+		
+		if (!set_bulk_voxels_sparse(sparse_block_voxel_data->voxel_densities, sparse_block_voxel_data->voxel_materials, sparse_block_voxel_data->voxel_indices)) {
+			return false;
+		}
+		
+		return true;
 	}
 	
 	const PackedInt32Array &source_indices = sparse_block_voxel_data->voxel_indices;
