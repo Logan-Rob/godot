@@ -1,8 +1,144 @@
 #include "file_manager.h"
 #include "core/math/vector3i.h"
 #include "core/variant/variant.h"
+#include "core/io/dir_access.h"
 #include "modules/voxel_engine/block_voxel_data.h"
 #include "modules/voxel_engine/voxel_constants.h"
+
+#include "core/object/class_db.h"
+
+
+
+bool FileManager::open_files(String selected_block_header_file_directory, String selected_payload_file_directory, String selected_temp_block_header_file_directory, String selected_temp_block_payload_file_directory) {
+	String target_header_directory = selected_block_header_file_directory.get_base_dir();
+	if (target_header_directory != "user://" && target_header_directory != "res://") {
+		Error header_directory_error = DirAccess::make_dir_recursive_absolute(target_header_directory);
+		if (header_directory_error != OK && header_directory_error != ERR_ALREADY_EXISTS) {
+			return false;
+		}
+	}
+	
+	String target_payload_directory = selected_payload_file_directory.get_base_dir();
+	if (target_payload_directory != "user://" && target_payload_directory != "res://") {
+		Error payload_directory_error = DirAccess::make_dir_recursive_absolute(target_payload_directory);
+		if (payload_directory_error != OK && payload_directory_error != ERR_ALREADY_EXISTS) {
+			return false;
+		}
+	}
+	
+	if (FileAccess::exists(selected_temp_block_header_file_directory)) {
+		Error error = DirAccess::remove_absolute(selected_temp_block_header_file_directory);
+		if (error != OK) {
+			return false;
+		}
+		
+		is_temp_header_file_initialized = false;
+	}
+	
+	if (FileAccess::exists(selected_temp_block_payload_file_directory)) {
+		Error error = DirAccess::remove_absolute(selected_temp_block_payload_file_directory);
+		if (error != OK) {
+			return false;
+		}
+		
+		is_temp_payload_file_initialized = false;
+	}
+	
+	bool new_block_header_file = !FileAccess::exists(selected_block_header_file_directory);
+	bool new_payload_file = !FileAccess::exists(selected_payload_file_directory);
+	
+	Ref<FileAccess> header_file = FileAccess::open(selected_block_header_file_directory, FileAccess::WRITE_READ);
+	Ref<FileAccess> payload_file = FileAccess::open(selected_payload_file_directory, FileAccess::WRITE_READ);
+	
+	if (!header_file.is_valid() || !payload_file.is_valid() || !header_file->is_open() || !payload_file->is_open()) {
+		return false;
+	}
+	
+	if (new_block_header_file) { // TEMPORARY make file header
+		PackedByteArray header_file_header;
+		header_file_header.resize(HEADER_FILE_HEADER_LENGTH);
+		header_file_header.fill(0);
+		
+		header_file->seek(0);
+		if (header_file->get_error() != OK) {
+			return false;
+		}
+		
+		header_file->store_buffer(header_file_header);
+		if (header_file->get_error() != OK) {
+			return false;
+		}
+	} else { // TEMPORARY read file header
+		int placeholder = 1;
+	}
+	
+	if (new_payload_file) { // TEMPORARY make file header
+		PackedByteArray payload_file_header;
+		payload_file_header.resize(PAYLOAD_FILE_HEADER_LENGTH);
+		payload_file_header.fill(0);
+		
+		payload_file->seek(0);
+		if (payload_file->get_error() != OK) {
+			return false;
+		}
+		
+		payload_file->store_buffer(payload_file_header);
+		if (payload_file->get_error() != OK) {
+			return false;
+		}
+	} else { // TEMPORARY read file header
+		int placeholder = 1;
+	}
+	
+	if (!populate_header_indices(header_file)) {
+		return false;
+	}
+	
+	block_header_file_directory = selected_block_header_file_directory;
+	block_payload_file_directory = selected_payload_file_directory;
+	temp_block_header_file_directory = selected_temp_block_header_file_directory;
+	temp_block_payload_file_directory = selected_temp_block_payload_file_directory;
+	is_header_file_initialized = true;
+	is_payload_file_initialized = true;
+	
+	header_file->close();
+	payload_file->close();
+	
+	return true;
+}
+
+bool FileManager::populate_header_indices(const Ref<FileAccess> &header_file) {
+	int header_count = get_total_block_header_count(header_file);
+	if (header_file->get_error() != OK) {
+		return false;
+	}
+	
+	header_index_lookup.clear();
+	free_header_indices.clear();
+	
+	if (header_count <= 0) {
+		return true;
+	}
+	
+	for (int header_index = 0; header_index < header_count; header_index++) {
+		int header_byte_index = convert_header_index_to_byte_index(header_index);
+		
+		PackedByteArray header_buffer = get_block_header_buffer(header_file, header_byte_index);
+		if (header_file->get_error() != OK) {
+			return false;
+		}
+		
+		FileManager::BlockHeaderBitset bitset = get_header_bool_bitset(header_buffer);
+		
+		if (bitset.is_active) {
+			header_index_lookup[get_header_position(header_buffer)] = header_index;
+		} else {
+			free_header_indices.append(header_index);
+		}
+	}
+	
+	return true;
+}
 
 
 
@@ -237,6 +373,11 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 	store_header_payload_length(header_buffer, padded_compressed_size);
 	store_header_padding_bytes(header_buffer, padded_byte_count);
 	store_header_voxel_count(header_buffer, voxel_count);
+	
+	header_file->seek(header_byte_index);
+	if (header_file->get_error() != OK) {
+		return false;
+	}
 	
 	header_file->store_buffer(header_buffer);
 	if (header_file->get_error() != OK) {
@@ -645,4 +786,19 @@ void FileManager::store_header_voxel_count(PackedByteArray &header_buffer, uint1
 	uint8_t *ptr = header_buffer.ptrw() + BLOCK_HEADER_VOXEL_COUNT_INDEX;
 	
 	memcpy(ptr, &voxel_count, sizeof(uint16_t));
+}
+
+
+
+
+
+
+
+
+
+void FileManager::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("open_files", "block_header_file_directory", "block_payload_file_directory", "temp_block_header_file_directory", "temp_block_payload_file_directory"), &FileManager::open_files);
+	ClassDB::bind_method(D_METHOD("save_voxels", "block_position", "voxel_data"), &FileManager::save_voxels);
+	ClassDB::bind_method(D_METHOD("load_voxels", "block_position"), &FileManager::load_voxels);
+	ClassDB::bind_method(D_METHOD("compact_files"), &FileManager::compact_files);
 }

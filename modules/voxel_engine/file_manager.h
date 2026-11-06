@@ -3,7 +3,11 @@
 #include "voxel_constants.h"
 #include "block_voxel_data.h"
 
-class FileManager {
+#include "scene/3d/node_3d.h"
+
+class FileManager : public RefCounted {
+	GDCLASS(FileManager, RefCounted);
+
 protected:
 	static constexpr int HEADER_FILE_HEADER_LENGTH = 28; // 26 + 2 padding bytes
 	static constexpr int HEADER_FILE_HEADER_VERSION_INDEX = 0;     // 2 Bytes
@@ -45,8 +49,15 @@ protected:
 	bool is_header_file_initialized = false;
 	bool is_payload_file_initialized = false;
 
+	String temp_block_header_file_directory = "user://saves/test_save/terrain.tvbh";
+	String temp_block_payload_file_directory = "user://saves/test_save/terrain.tvpl";
+	bool is_temp_header_file_initialized = false;
+	bool is_temp_payload_file_initialized = false;
+
 	HashMap<Vector3i, int> header_index_lookup;
 	PackedInt32Array free_header_indices;
+	
+	bool populate_header_indices(const Ref<FileAccess> &header_file);
 	
 	bool write_voxels_to_disk(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, int header_index, const Ref<BlockVoxelData> &voxel_data);
 	bool read_voxels_from_disk(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, int header_index, const Ref<BlockVoxelData> &voxel_data);
@@ -74,7 +85,14 @@ protected:
 	uint16_t get_header_voxel_count(const PackedByteArray &header_buffer) const;
 	void store_header_voxel_count(PackedByteArray &header_buffer, uint16_t voxel_count);
 
+
+
+
+	static void _bind_methods();
+
 public:
+	bool open_files(String selected_block_header_file_directory, String selected_payload_file_directory, String selected_temp_block_header_file_directory, String selected_temp_payload_file_directory);
+
 	bool save_voxels(Vector3i block_position, const Ref<BlockVoxelData> &voxel_data);
 	Ref<BlockVoxelData> load_voxels(Vector3i block_position);
 
