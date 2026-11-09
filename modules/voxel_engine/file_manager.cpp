@@ -14,6 +14,7 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 	if (target_header_directory != "user://" && target_header_directory != "res://") {
 		Error header_directory_error = DirAccess::make_dir_recursive_absolute(target_header_directory);
 		if (header_directory_error != OK && header_directory_error != ERR_ALREADY_EXISTS) {
+			ERR_PRINT("Failed to make directory: " + target_header_directory);
 			return false;
 		}
 	}
@@ -22,6 +23,7 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 	if (target_payload_directory != "user://" && target_payload_directory != "res://") {
 		Error payload_directory_error = DirAccess::make_dir_recursive_absolute(target_payload_directory);
 		if (payload_directory_error != OK && payload_directory_error != ERR_ALREADY_EXISTS) {
+			ERR_PRINT("Failed to make directory: " + target_payload_directory);
 			return false;
 		}
 	}
@@ -29,6 +31,7 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 	if (FileAccess::exists(selected_temp_block_header_file_directory)) {
 		Error error = DirAccess::remove_absolute(selected_temp_block_header_file_directory);
 		if (error != OK) {
+			ERR_PRINT("Failed to remove temporary header file: " + selected_temp_block_header_file_directory);
 			return false;
 		}
 		
@@ -38,6 +41,7 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 	if (FileAccess::exists(selected_temp_block_payload_file_directory)) {
 		Error error = DirAccess::remove_absolute(selected_temp_block_payload_file_directory);
 		if (error != OK) {
+			ERR_PRINT("Failed to remove temporary payload file: " + selected_temp_block_payload_file_directory);
 			return false;
 		}
 		
@@ -47,10 +51,11 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 	bool new_block_header_file = !FileAccess::exists(selected_block_header_file_directory);
 	bool new_payload_file = !FileAccess::exists(selected_payload_file_directory);
 	
-	Ref<FileAccess> header_file = FileAccess::open(selected_block_header_file_directory, FileAccess::WRITE_READ);
-	Ref<FileAccess> payload_file = FileAccess::open(selected_payload_file_directory, FileAccess::WRITE_READ);
+	Ref<FileAccess> header_file = FileAccess::open(selected_block_header_file_directory, new_block_header_file ? FileAccess::WRITE_READ : FileAccess::READ_WRITE);
+	Ref<FileAccess> payload_file = FileAccess::open(selected_payload_file_directory, new_payload_file ? FileAccess::WRITE_READ : FileAccess::READ_WRITE);
 	
 	if (!header_file.is_valid() || !payload_file.is_valid() || !header_file->is_open() || !payload_file->is_open()) {
+		ERR_PRINT("Files are invalid or not open after request");
 		return false;
 	}
 	
@@ -61,11 +66,19 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 		
 		header_file->seek(0);
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file header seek error");
 			return false;
 		}
 		
 		header_file->store_buffer(header_file_header);
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file header store error");
+			return false;
+		}
+		
+		header_file->flush();
+		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file header flush error");
 			return false;
 		}
 	} else { // TEMPORARY read file header
@@ -79,11 +92,19 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 		
 		payload_file->seek(0);
 		if (payload_file->get_error() != OK) {
+			ERR_PRINT("Payload file header seek error");
 			return false;
 		}
 		
 		payload_file->store_buffer(payload_file_header);
 		if (payload_file->get_error() != OK) {
+			ERR_PRINT("Payload file header store error");
+			return false;
+		}
+		
+		payload_file->flush();
+		if (header_file->get_error() != OK) {
+			ERR_PRINT("Payload file header flush error");
 			return false;
 		}
 	} else { // TEMPORARY read file header
@@ -91,6 +112,7 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 	}
 	
 	if (!populate_header_indices(header_file)) {
+		ERR_PRINT("Populate_header_indices_error");
 		return false;
 	}
 	
@@ -110,6 +132,7 @@ bool FileManager::open_files(String selected_block_header_file_directory, String
 bool FileManager::populate_header_indices(const Ref<FileAccess> &header_file) {
 	int header_count = get_total_block_header_count(header_file);
 	if (header_file->get_error() != OK) {
+		ERR_PRINT("Unable to get total header count");
 		return false;
 	}
 	
@@ -125,6 +148,7 @@ bool FileManager::populate_header_indices(const Ref<FileAccess> &header_file) {
 		
 		PackedByteArray header_buffer = get_block_header_buffer(header_file, header_byte_index);
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Unable to get total header buffer");
 			return false;
 		}
 		
@@ -144,12 +168,18 @@ bool FileManager::populate_header_indices(const Ref<FileAccess> &header_file) {
 
 bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData> &voxel_data) {
 	if (!is_header_file_initialized || !is_payload_file_initialized) {
+		ERR_PRINT("Payload or header file not initialized");
 		return false;
 	}
 	
 	BlockVoxelData::ResourceState resource_state = voxel_data->get_resource_state();
 	
-	if (resource_state == BlockVoxelData::ResourceState::Uninitialized || resource_state == BlockVoxelData::ResourceState::Empty) {
+	if (resource_state == BlockVoxelData::ResourceState::Empty) {
+		return true;
+	}
+	
+	if (resource_state == BlockVoxelData::ResourceState::Uninitialized) {
+		ERR_PRINT("Attempted to sace uninitialized BlockVoxelData");
 		return false;
 	}
 	
@@ -166,6 +196,7 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 				if (!voxel_data->convert_sparse_to_dense(true)) {
 					header_file->close();
 					payload_file->close();
+					ERR_PRINT("Failed sparse -> dense conversion for BlockVoxelData");
 					return false;
 				}
 				
@@ -178,6 +209,7 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 				if (!voxel_data->convert_dense_to_sparse()) {
 					header_file->close();
 					payload_file->close();
+					ERR_PRINT("Failed sparse -> dense conversion for BlockVoxelData");
 					return false;
 				}
 				
@@ -192,6 +224,7 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 		if (!write_voxels_to_disk(header_file, payload_file, header_index, voxel_data)) {
 			header_file->close();
 			payload_file->close();
+			ERR_PRINT("Failed to write voxels to disk");
 			return false;
 		}
 	} else {
@@ -200,6 +233,7 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 		if (!read_voxels_from_disk(header_file, payload_file, header_index, base_voxel_data)) {
 			header_file->close();
 			payload_file->close();
+			ERR_PRINT("Failed to read voxels from disk");
 			return false;
 		}
 		
@@ -207,6 +241,7 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 			if (!write_voxels_to_disk(header_file, payload_file, header_index, voxel_data)) {
 				header_file->close();
 				payload_file->close();
+				ERR_PRINT("Failed to write voxels to disk");
 				return false;
 			}
 			
@@ -220,12 +255,14 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 		if (base_resource_state == BlockVoxelData::ResourceState::Uninitialized) {
 			header_file->close();
 			payload_file->close();
+			ERR_PRINT("Base voxel data is uninitialized");
 			return false;
 		}
 		
 		if (!base_voxel_data->merge_sparse_block_data_into_self(voxel_data)) {
 			header_file->close();
 			payload_file->close();
+			ERR_PRINT("Failed to merge sparse block data into self");
 			return false;
 		}
 		
@@ -234,6 +271,7 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 				if (!base_voxel_data->convert_sparse_to_dense(true)) {
 					header_file->close();
 					payload_file->close();
+					ERR_PRINT("Failed sparse -> dense conversion for BlockVoxelData");
 					return false;
 				}
 				
@@ -246,6 +284,7 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 				if (!base_voxel_data->convert_dense_to_sparse()) {
 					header_file->close();
 					payload_file->close();
+					ERR_PRINT("Failed dense -> sparse conversion for BlockVoxelData");
 					return false;
 				}
 				
@@ -258,6 +297,7 @@ bool FileManager::save_voxels(Vector3i block_position, const Ref<BlockVoxelData>
 		if (!write_voxels_to_disk(header_file, payload_file, header_index, base_voxel_data)) {
 			header_file->close();
 			payload_file->close();
+			ERR_PRINT("Failed to write voxels to disk");
 			return false;
 		}
 	}
@@ -272,6 +312,7 @@ Ref<BlockVoxelData> FileManager::load_voxels(Vector3i block_position) {
 	Ref<BlockVoxelData> voxel_data = memnew(BlockVoxelData);
 	
 	if (!is_header_file_initialized || !is_payload_file_initialized) {
+		ERR_PRINT("Payload or header file not initialized");
 		voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
 		return voxel_data;
 	}
@@ -286,8 +327,22 @@ Ref<BlockVoxelData> FileManager::load_voxels(Vector3i block_position) {
 	Ref<FileAccess> header_file = FileAccess::open(block_header_file_directory, FileAccess::READ);
 	Ref<FileAccess> payload_file = FileAccess::open(block_payload_file_directory, FileAccess::READ);
 	
+	if (!header_file.is_valid() || !payload_file.is_valid() || !header_file->is_open() || !payload_file->is_open()) {
+		ERR_PRINT("Files are invalid or not open after request");
+		header_file->close();
+		payload_file->close();
+		voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+		return voxel_data;
+	}
+	
 	const int header_index = *header_index_ptr;
-	read_voxels_from_disk(header_file, payload_file, header_index, voxel_data);
+	if (!read_voxels_from_disk(header_file, payload_file, header_index, voxel_data)) {
+		ERR_PRINT("Failed to read voxels from disk");
+		header_file->close();
+		payload_file->close();
+		voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+		return voxel_data;
+	}
 	
 	header_file->close();
 	payload_file->close();
@@ -299,6 +354,7 @@ Ref<BlockVoxelData> FileManager::load_voxels(Vector3i block_position) {
 
 bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, int header_index, const Ref<BlockVoxelData> &voxel_data) {
 	if (!is_header_file_initialized || !is_payload_file_initialized || !header_file.is_valid() || !payload_file.is_valid() || !header_file->is_open() || !payload_file->is_open()) {
+		ERR_PRINT("Files are not initialized, invalid, or not open");
 		return false;
 	}
 	
@@ -308,15 +364,18 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 	PackedByteArray new_block_payload;
 	
 	if (block_state == BlockVoxelData::ResourceState::Uninitialized || block_state == BlockVoxelData::ResourceState::Empty) {
+		ERR_PRINT("Tried to write uninitialized or empty BlockVoxelData to disk");
 		return false;
 	}
 	
 	int header_byte_index = convert_header_index_to_byte_index(header_index);
 	PackedByteArray header_buffer = get_block_header_buffer(header_file, header_byte_index);
 	if (header_file->get_error() != OK) {
+		ERR_PRINT("Unable to get total header buffer");
 		return false;
 	}
 	if (header_buffer.size() != BLOCK_HEADER_LENGTH) {
+		ERR_PRINT("Invalid header buffer size");
 		return false;
 	}
 	FileManager::BlockHeaderBitset bitset = get_header_bool_bitset(header_buffer);
@@ -330,6 +389,7 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 		uncompressed_new_voxel_data.append_array(convert_int16_array_to_packed_byte_array(voxel_data->voxel_indices));
 		
 		if (uncompressed_new_voxel_data.size() != voxel_count * SPARSE_VOXEL_SIZE) {
+			ERR_PRINT("Uncompressed voxel size is not the sparse expected size");
 			return false;
 		}
 	} else {
@@ -340,6 +400,7 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 		uncompressed_new_voxel_data.append_array(voxel_data->voxel_materials);
 		
 		if (uncompressed_new_voxel_data.size() != VoxelConstants::BLOCK_VOXEL_VOLUME * DENSE_VOXEL_SIZE) {
+			ERR_PRINT("Uncompressed voxel size is not the dense expected size");
 			return false;
 		}
 	}
@@ -348,6 +409,7 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 	int64_t compressed_size = Compression::compress(new_block_payload.ptrw(), uncompressed_new_voxel_data.ptr(), uncompressed_new_voxel_data.size(), Compression::MODE_ZSTD);
 	
 	if (compressed_size < 0) {
+		ERR_PRINT(vformat("Compression error, returned size code: %d", compressed_size));
 		return false;
 	}
 	
@@ -358,14 +420,17 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 	
 	payload_file->seek_end();
 	if (payload_file->get_error() != OK) {
+		ERR_PRINT("Payload file seek error");
 		return false;
 	}
 	payload_file->store_buffer(new_block_payload);
 	if (payload_file->get_error() != OK) {
+		ERR_PRINT("Payload file store error");
 		return false;
 	}
 	payload_file->flush();
 	if (payload_file->get_error() != OK) {
+		ERR_PRINT("Payload file flush error");
 		return false;
 	}
 	
@@ -376,15 +441,18 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 	
 	header_file->seek(header_byte_index);
 	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file seek error");
 		return false;
 	}
 	
 	header_file->store_buffer(header_buffer);
 	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file store error");
 		return false;
 	}
 	header_file->flush();
 	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file flush error");
 		return false;
 	}
 	
@@ -394,6 +462,7 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, const Ref<FileAccess> &payload_file, int header_index, const Ref<BlockVoxelData> &voxel_data) {
 	if (!is_header_file_initialized || !is_payload_file_initialized || !header_file.is_valid() || !payload_file.is_valid() || !header_file->is_open() || !payload_file->is_open()) {
 		voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+		ERR_PRINT("Files are not initialized, invalid, or not open");
 		return false;
 	}
 	
@@ -401,10 +470,12 @@ bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, cons
 	PackedByteArray header_buffer = get_block_header_buffer(header_file, header_byte_index);
 	if (header_file->get_error() != OK) {
 		voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+		ERR_PRINT("Unable to get total header buffer");
 		return false;
 	}
 	if (header_buffer.size() != BLOCK_HEADER_LENGTH) {
 		voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+		ERR_PRINT("Invalid header buffer size");
 		return false;
 	}
 	int payload_pointer = get_header_payload_pointer(header_buffer);
@@ -419,12 +490,14 @@ bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, cons
 	payload_file->seek(payload_pointer);
 	if (payload_file->get_error() != OK) {
 		voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+		ERR_PRINT("Payload file seek error");
 		return false;
 	}
 	
 	PackedByteArray compressed_payload = payload_file->get_buffer(payload_length);
 	if (payload_file->get_error() != OK) {
 		voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+		ERR_PRINT("Payload file get buffer error");
 		return false; 
 	}
 	
@@ -438,6 +511,7 @@ bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, cons
 		const int64_t decompressed_length = Compression::decompress(decompressed_payload.ptrw(), decompressed_payload_length, compressed_payload.ptr(), compressed_payload.size(), Compression::MODE_ZSTD);
 		
 		if (decompressed_length != decompressed_payload_length) {
+			ERR_PRINT("Uncompressed voxel size is not the dense expected size");
 			return false;
 		}
 		
@@ -451,6 +525,7 @@ bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, cons
 		
 		if (!voxel_data->set_bulk_voxels_dense(densities, materials, edited_voxels)) {
 			voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+			ERR_PRINT("Failed to set bulk voxels dense");
 			return false; 
 		}
 	} else {
@@ -461,6 +536,7 @@ bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, cons
 		const int64_t decompressed_length = Compression::decompress(decompressed_payload.ptrw(), decompressed_payload_length, compressed_payload.ptr(), compressed_payload.size(), Compression::MODE_ZSTD);
 		
 		if (decompressed_length != decompressed_payload_length) {
+			ERR_PRINT("Uncompressed voxel size is not the sparse expected size");
 			return false;
 		}
 		
@@ -471,6 +547,7 @@ bool FileManager::read_voxels_from_disk(const Ref<FileAccess> &header_file, cons
 		
 		if (!voxel_data->set_bulk_voxels_sparse(densities, materials, indices)) {
 			voxel_data->initialize_voxel_data(BlockVoxelData::ResourceState::Uninitialized);
+			ERR_PRINT("Failed to set bulk voxels sparse");
 			return false; 
 		}
 	}

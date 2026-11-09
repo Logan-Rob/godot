@@ -248,6 +248,7 @@ int BlockVoxelData::get_edited_voxel_count() {
 
 bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, const PackedByteArray &materials, const PackedInt32Array &indices) {
 	if (current_resource_state != BlockVoxelData::ResourceState::Sparse) {
+		ERR_PRINT("a");
 		return false;
 	}
 	
@@ -256,10 +257,12 @@ bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, co
 	int voxel_index_count = indices.size();
 	
 	if (voxel_density_count <= 0 || voxel_material_count <= 0 || voxel_index_count <= 0 || voxel_density_count > VoxelConstants::BLOCK_VOXEL_VOLUME || voxel_material_count > VoxelConstants::BLOCK_VOXEL_VOLUME || voxel_index_count > VoxelConstants::BLOCK_VOXEL_VOLUME) {
+		ERR_PRINT("b");
 		return false;
 	}
 	
 	if (voxel_density_count != voxel_material_count || voxel_material_count != voxel_index_count) {
+		ERR_PRINT("c");
 		return false;
 	}
 	
@@ -269,6 +272,7 @@ bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, co
 		int voxel_index = indices[i];
 		
 		if (voxel_index < 0 || voxel_index >= VoxelConstants::BLOCK_VOXEL_VOLUME || voxel_index_staging_lookup.has(voxel_index)) {
+			ERR_PRINT("d");
 			return false;
 		}
 		
