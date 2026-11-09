@@ -1,5 +1,6 @@
 #include "voxel_constants.h"
 #include <cstdint>
+#include "core/error/error_macros.h"
 #include "core/object/class_db.h"
 #include "core/templates/hash_map.h"
 #include "core/variant/variant.h"
@@ -87,14 +88,17 @@ void BlockVoxelData::initialize_voxel_data(BlockVoxelData::ResourceState resourc
 
 bool BlockVoxelData::set_voxel(int voxel_index, int voxel_density, int voxel_material, bool is_voxel_edited) {
 	if (voxel_index < 0 || voxel_index >= VoxelConstants::BLOCK_VOXEL_VOLUME) {
+		ERR_PRINT(vformat("Voxel index not within volume bounds (0 - %d)", VoxelConstants::BLOCK_VOXEL_VOLUME));
 		return false;
 	}
 	
 	if (voxel_density < 0 || voxel_material < 0 || voxel_density > UINT8_MAX || voxel_material > UINT8_MAX) {
+		ERR_PRINT("Voxel density or material not within acceptable bounds");
 		return false;
 	}
 	
 	if (current_resource_state == BlockVoxelData::ResourceState::Uninitialized || current_resource_state == BlockVoxelData::ResourceState::Empty) {
+		ERR_PRINT("Tried to set voxel on uninitialized or empty BlockVoxelData");
 		return false;
 	}
 	
@@ -135,16 +139,19 @@ bool BlockVoxelData::set_voxel(int voxel_index, int voxel_density, int voxel_mat
 
 bool BlockVoxelData::remove_voxel(int voxel_index) {
 	if (voxel_index < 0 || voxel_index >= VoxelConstants::BLOCK_VOXEL_VOLUME) {
+		ERR_PRINT(vformat("Voxel index not within volume bounds (0 - %d)", VoxelConstants::BLOCK_VOXEL_VOLUME));
 		return false;
 	}
 	
 	if (current_resource_state != BlockVoxelData::ResourceState::Sparse) {
+		ERR_PRINT("Tried to remove voxel on non sparse BlockVoxelData");
 		return false;
 	}
 	
 	int *voxel_array_index_ptr = voxel_index_lookup.getptr(voxel_index);
 	
 	if (voxel_array_index_ptr == nullptr) {
+		ERR_PRINT("Tried to remove nonexistant voxel");
 		return false;
 	}
 	
@@ -177,10 +184,12 @@ Ref<Voxel> BlockVoxelData::get_voxel(int voxel_index) {
 	voxel->material = 0;
 	
 	if (voxel_index < 0 || voxel_index >= VoxelConstants::BLOCK_VOXEL_VOLUME) {
+		ERR_PRINT(vformat("Voxel index not within volume bounds (0 - %d)", VoxelConstants::BLOCK_VOXEL_VOLUME));
 		return voxel;
 	}
 	
 	if (current_resource_state == BlockVoxelData::ResourceState::Uninitialized || current_resource_state == BlockVoxelData::ResourceState::Empty) {
+		ERR_PRINT("Tried to set voxel on uninitialized or empty BlockVoxelData");
 		return voxel;
 	}
 	
@@ -188,6 +197,7 @@ Ref<Voxel> BlockVoxelData::get_voxel(int voxel_index) {
 		int *voxel_array_index_ptr = voxel_index_lookup.getptr(voxel_index);
 		
 		if (voxel_array_index_ptr == nullptr) {
+			ERR_PRINT("Tried to get nonexistant voxel");
 			return voxel;
 		}
 		
@@ -248,7 +258,7 @@ int BlockVoxelData::get_edited_voxel_count() {
 
 bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, const PackedByteArray &materials, const PackedInt32Array &indices) {
 	if (current_resource_state != BlockVoxelData::ResourceState::Sparse) {
-		ERR_PRINT("a");
+		ERR_PRINT("BlockVoxelData is not sparse");
 		return false;
 	}
 	
@@ -257,12 +267,12 @@ bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, co
 	int voxel_index_count = indices.size();
 	
 	if (voxel_density_count <= 0 || voxel_material_count <= 0 || voxel_index_count <= 0 || voxel_density_count > VoxelConstants::BLOCK_VOXEL_VOLUME || voxel_material_count > VoxelConstants::BLOCK_VOXEL_VOLUME || voxel_index_count > VoxelConstants::BLOCK_VOXEL_VOLUME) {
-		ERR_PRINT("b");
+		ERR_PRINT(vformat("Bulk sparse voxel data array sizes not within volume bounds (1 - %d)", VoxelConstants::BLOCK_VOXEL_VOLUME));
 		return false;
 	}
 	
 	if (voxel_density_count != voxel_material_count || voxel_material_count != voxel_index_count) {
-		ERR_PRINT("c");
+		ERR_PRINT("Bulk sparse voxel data arrays do not all share the same size");
 		return false;
 	}
 	
@@ -271,8 +281,13 @@ bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, co
 	for (int i = 0; i < voxel_index_count; i++) {
 		int voxel_index = indices[i];
 		
-		if (voxel_index < 0 || voxel_index >= VoxelConstants::BLOCK_VOXEL_VOLUME || voxel_index_staging_lookup.has(voxel_index)) {
-			ERR_PRINT("d");
+		if (voxel_index < 0 || voxel_index >= VoxelConstants::BLOCK_VOXEL_VOLUME) {
+			ERR_PRINT(vformat("Voxel index not within volume bounds (0 - %d)", VoxelConstants::BLOCK_VOXEL_VOLUME));
+			return false;
+		}
+		
+		if (voxel_index_staging_lookup.has(voxel_index)) {
+			ERR_PRINT(vformat("Voxel index %d is repeated", voxel_index));
 			return false;
 		}
 		
@@ -289,10 +304,12 @@ bool BlockVoxelData::set_bulk_voxels_sparse(const PackedByteArray &densities, co
 
 bool BlockVoxelData::set_bulk_voxels_dense(const PackedByteArray &densities, const PackedByteArray &materials, const PackedByteArray &edited_voxels) {
 	if (current_resource_state != BlockVoxelData::ResourceState::Dense) {
+		ERR_PRINT("BlockVoxelData is not dense");
 		return false;
 	}
 	
 	if (densities.size() != VoxelConstants::BLOCK_VOXEL_VOLUME || materials.size() != VoxelConstants::BLOCK_VOXEL_VOLUME || voxel_is_edited.size() != VoxelConstants::BLOCK_VOXEL_VOLUME) {
+		ERR_PRINT(vformat("Bulk dense voxel data arrays do not match expected size: %d", VoxelConstants::BLOCK_VOXEL_VOLUME));
 		return false;
 	}
 	
@@ -310,14 +327,17 @@ bool BlockVoxelData::set_bulk_voxels_dense(const PackedByteArray &densities, con
 
 bool BlockVoxelData::merge_sparse_block_data_into_self(const Ref<BlockVoxelData> &sparse_block_voxel_data) {
 	if (sparse_block_voxel_data.is_null()) {
+		ERR_PRINT("Tried to merge null sparse BlockVoxelData into self");
 		return false;
 	}
 	
 	if (current_resource_state == BlockVoxelData::ResourceState::Uninitialized) {
+		ERR_PRINT("Tried to merge sparse BlockVoxelData into uninitialized self");
 		return false;
 	}
 	
 	if (sparse_block_voxel_data->get_resource_state() != BlockVoxelData::ResourceState::Sparse) {
+		ERR_PRINT("Tried to merge non sparse BlockVoxelData into self");
 		return false;
 	}
 	
@@ -325,6 +345,7 @@ bool BlockVoxelData::merge_sparse_block_data_into_self(const Ref<BlockVoxelData>
 		initialize_voxel_data(BlockVoxelData::ResourceState::Sparse);
 		
 		if (!set_bulk_voxels_sparse(sparse_block_voxel_data->voxel_densities, sparse_block_voxel_data->voxel_materials, sparse_block_voxel_data->voxel_indices)) {
+			ERR_PRINT("Failed to set sparse bulk voxels");
 			return false;
 		}
 		
@@ -364,6 +385,7 @@ bool BlockVoxelData::generate_dense_block_data(bool use_terrain_generator) {
 
 bool BlockVoxelData::convert_sparse_to_dense(bool use_terrain_generator) {
 	if (current_resource_state != BlockVoxelData::ResourceState::Sparse) {
+		ERR_PRINT("Tried to convert non sparse BlockVoxelData to dense");
 		return false;
 	}
 	
@@ -404,6 +426,7 @@ bool BlockVoxelData::convert_sparse_to_dense(bool use_terrain_generator) {
 
 bool BlockVoxelData::convert_dense_to_sparse() {
 	if (current_resource_state != BlockVoxelData::ResourceState::Dense) {
+		ERR_PRINT("Tried to convert non dense BlockVoxelData to sparse");
 		return false;
 	}
 	
