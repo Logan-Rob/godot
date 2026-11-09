@@ -1,4 +1,5 @@
 #include "file_manager.h"
+#include "core/error/error_macros.h"
 #include "core/math/vector3i.h"
 #include "core/variant/variant.h"
 #include "core/io/dir_access.h"
@@ -378,12 +379,14 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 		ERR_PRINT("Invalid header buffer size");
 		return false;
 	}
-	FileManager::BlockHeaderBitset bitset = get_header_bool_bitset(header_buffer);
 	
-	if (block_state == BlockVoxelData::ResourceState::Sparse) {
-		bitset.is_dense = false;
-		store_header_bool_bitset(header_buffer, bitset);
-		
+	FileManager::BlockHeaderBitset bitset = get_header_bool_bitset(header_buffer);
+	bitset.is_active = true;
+	
+	bool is_dense_block = (block_state == BlockVoxelData::ResourceState::Dense);
+	bitset.is_dense = is_dense_block;
+	
+	if (!is_dense_block) {
 		uncompressed_new_voxel_data.append_array(voxel_data->voxel_densities);
 		uncompressed_new_voxel_data.append_array(voxel_data->voxel_materials);
 		uncompressed_new_voxel_data.append_array(convert_int16_array_to_packed_byte_array(voxel_data->voxel_indices));
@@ -393,9 +396,6 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 			return false;
 		}
 	} else {
-		bitset.is_dense = true;
-		store_header_bool_bitset(header_buffer, bitset);
-		
 		uncompressed_new_voxel_data.append_array(voxel_data->voxel_densities);
 		uncompressed_new_voxel_data.append_array(voxel_data->voxel_materials);
 		
@@ -434,6 +434,7 @@ bool FileManager::write_voxels_to_disk(const Ref<FileAccess> &header_file, const
 		return false;
 	}
 	
+	store_header_bool_bitset(header_buffer, bitset);
 	store_header_payload_pointer(header_buffer, new_payload_pointer);
 	store_header_payload_length(header_buffer, padded_compressed_size);
 	store_header_padding_bytes(header_buffer, padded_byte_count);
@@ -591,14 +592,17 @@ int FileManager::create_block_header(const Ref<FileAccess> &header_file, Vector3
 	
 	header_file->seek(header_byte_index);
 	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file seek error");
 		return -2;
 	}
 	header_file->store_buffer(header_buffer);
 	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file store error");
 		return -2;
 	}
 	header_file->flush();
 	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file flush error");
 		return -2;
 	}
 	
@@ -619,10 +623,12 @@ int FileManager::remove_block_header(const Ref<FileAccess> &header_file, Vector3
 	if (header_index == get_total_block_header_count(header_file) - 1) {
 		header_file->resize(header_byte_index);
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file resize error");
 			return -2;
 		}
 		header_file->flush();
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file flush error");
 			return -2;
 		}
 		
@@ -644,14 +650,17 @@ int FileManager::remove_block_header(const Ref<FileAccess> &header_file, Vector3
 		
 		header_file->seek(header_byte_index);
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file seek error");
 			return -2;
 		}
 		header_file->store_buffer(header_buffer);
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file store error");
 			return -2;
 		}
 		header_file->flush();
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file flush error");
 			return -2;
 		}
 		
@@ -685,10 +694,12 @@ bool FileManager::trim_free_tail_headers(const Ref<FileAccess> &header_file) {
 		
 		header_file->resize(new_file_size);
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file resize error");
 			return false;
 		}
 		header_file->flush();
 		if (header_file->get_error() != OK) {
+			ERR_PRINT("Header file flush error");
 			return false;
 		}
 	}
@@ -743,6 +754,9 @@ PackedInt32Array FileManager::convert_packed_byte_array_to_int16_array(const Pac
 
 int FileManager::get_total_block_header_count(const Ref<FileAccess> &header_file) {
 	const int block_header_count = (header_file->get_length() - HEADER_FILE_HEADER_LENGTH) / BLOCK_HEADER_LENGTH;
+	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file get length error");
+	}
 	
 	return block_header_count;
 }
@@ -758,7 +772,13 @@ PackedByteArray FileManager::get_block_header_buffer(const Ref<FileAccess> &head
 	header_buffer.resize(BLOCK_HEADER_LENGTH);
 	
 	header_file->seek(header_byte_index);
+	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file seek error");
+	}
 	header_file->get_buffer(header_buffer.ptrw(), BLOCK_HEADER_LENGTH);
+	if (header_file->get_error() != OK) {
+		ERR_PRINT("Header file get buffer error");
+	}
 	
 	return header_buffer;
 }
